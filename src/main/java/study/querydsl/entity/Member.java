@@ -36,7 +36,7 @@ public class Member {
         if (team != null) {
             changeTeam(team);
         }
-
+        this.team = team;
     }
     public void changeTeam(Team team) {
         this.team = team;
