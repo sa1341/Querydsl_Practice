@@ -1,17 +1,18 @@
 package study.querydsl;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import study.querydsl.entity.Member;
-import study.querydsl.entity.QMember;
 import study.querydsl.entity.Team;
 
 import javax.persistence.EntityManager;
 import javax.transaction.Transactional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static study.querydsl.entity.QMember.member;
 
 @Transactional
 @SpringBootTest
@@ -53,7 +54,7 @@ public class QuerydslBasicTest {
                 .setParameter("username", "member1")
                 .getSingleResult();
 
-        Assertions.assertThat(findMember.getUsername()).isEqualTo("member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
     }
 
     @Test
@@ -61,21 +62,52 @@ public class QuerydslBasicTest {
 
         //given
 
-
-        QMember member = QMember.member;
-
         //when
+        // Static으로 import 해서 Q 타입을 사용하는게 가장 권장되고 깔끔한 방식입니다.
         Member findMember = queryFactory
                 .select(member)
                 .from(member)
-                .where(member.username.eq("member1")) // 파라미터 바인딩 처리
+                .where(member.username.eq("member1")) // 파라미터 바인딩 처리, 생성자로 주는 값은 JPQL 실행 시에 주석으로 나오는 테이블 alias를 의미합니다.
                 .fetchOne();
-
-
         //then
-        Assertions.assertThat(findMember.getUsername()).isEqualTo("member1");
+        assertThat(findMember.getUsername()).isEqualTo("member1");
      }
     
-    
+     @Test
+     public void search() throws Exception {
 
+         //given
+
+         //when
+         Member findMember = queryFactory
+                 .selectFrom(member)
+                 .where(member.username.eq("member1")
+                         .and(member.age.eq(10)))
+                 .fetchOne();
+
+         //then
+         assertThat(findMember.getUsername()).isEqualTo("member1");
+
+
+      }
+
+
+    @Test
+    public void searchAndParam() throws Exception {
+
+        //given
+        //가독성이 좋고 깔끔한 방법이다.
+        //when
+        Member findMember = queryFactory
+                .selectFrom(member)
+                .where(
+                        member.username.eq("member1"),
+                        (member.age.eq(10)))
+                .fetchOne();
+
+        //then
+        assertThat(findMember.getUsername()).isEqualTo("member1");
+
+
+    }
 }
