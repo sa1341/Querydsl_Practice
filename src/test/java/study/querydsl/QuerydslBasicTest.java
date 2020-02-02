@@ -1,5 +1,6 @@
 package study.querydsl;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import study.querydsl.dto.MemberDto;
+import study.querydsl.dto.QMemberDto;
 import study.querydsl.dto.UserDto;
 import study.querydsl.entity.Member;
 import study.querydsl.entity.QMember;
@@ -740,6 +742,7 @@ public class QuerydslBasicTest {
     @Test
     public void findDtoByConstructor() throws Exception {
         //생성자 통해서 dto에 값을 넣어서 반환해줍니다.를 생성자에서 받는 매개변수 개수와 프로젝션 타입과 개수가 일치해야 합니다.
+        // constructor의 단점은 생성자의 수가 맞지 않아도 컴파일 시점에 에러가 나지 않고 런타임 시점에 에러가 발생합니다.
         //given
         List<UserDto> result = queryFactory
                 .select(Projections.constructor(UserDto.class,
@@ -783,5 +786,67 @@ public class QuerydslBasicTest {
 
         //then
     }
+
+
+    @Test
+    public void findDtoByQueryProjection() throws Exception {
+        // MemberDto 클래스에 @QueryProjection 어노테이션이 적용하고 gradle에서 compileQuerydsl을 해주면 QMemberDto클래스가 생성됩니다. 이걸로 dto 변환이 쉽게 가능합니다.
+        // @QueryProjection 이 방식을 사용하면 컴파일 시점에 에러를 잡을 수 있는 장점이 있습니다. 위 방식의 consturctor 방식은 런타임 시점에 에러가 발생하기 때문입니다.
+        // 또한 querydsl 라이브러리에 의존성이 높다는 단점이 있기 때문에 dto가 순수하지가 않다는 점이 있습니다.
+        //given
+        List<MemberDto> result = queryFactory
+                .select(new QMemberDto(member.username, member.age))
+                .from(member)
+                .fetch();
+
+        for (MemberDto memberDto : result){
+            System.out.println("memberDto = " + memberDto);
+        }
+
+
+        //when
+
+        //then
+     }
+
+    /**
+     * 동적 쿼리 - BooleanBuilder 사용 예제
+     *
+     */
+
+
+    @Test
+    public void dynamicQuery_BooleanBuilder() throws Exception {
+
+        //given
+        String usernameParam = "member1";
+        Integer ageParam = null;
+
+        List<Member> result = searchMember1(usernameParam, ageParam);
+        //when
+
+        //then
+        assertThat(result.size()).isEqualTo(1);
+     }
+
+    private List<Member> searchMember1(String usernameCond, Integer ageCond) {
+
+        BooleanBuilder builder = new BooleanBuilder();
+
+        if(usernameCond != null){
+            builder.and(member.username.eq(usernameCond));
+        }
+
+        if(ageCond != null){
+            builder.and(member.age.eq(ageCond));
+        }
+
+        return queryFactory
+                .selectFrom(member)
+                .where(builder)
+                .fetch();
+    }
+
+
 }
 
