@@ -17,6 +17,7 @@ class QuerydslApplicationTests {
 
 	@PersistenceContext
 	EntityManager em;
+
 	@Test
 	void contextLoads() {
 		Hello hello = new Hello();

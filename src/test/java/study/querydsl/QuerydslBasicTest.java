@@ -5,6 +5,7 @@ import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -119,7 +120,7 @@ public class QuerydslBasicTest {
                 .selectFrom(member)
                 .where(
                         member.username.eq("member1"),
-                        (member.age.eq(10)))
+                        member.age.eq(10))
                 .fetchOne();
 
         //then
@@ -217,6 +218,11 @@ public class QuerydslBasicTest {
                 .fetchResults();
 
 
+        List<Member> members = queryResults.getResults();
+
+        members.forEach(member -> System.out.println("member:" +  member));
+
+
         //then
         assertThat(queryResults.getTotal()).isEqualTo(4);
         assertThat(queryResults.getLimit()).isEqualTo(2);
@@ -254,7 +260,7 @@ public class QuerydslBasicTest {
     }
 
     /**
-     * 팀의 이름과 각 팀의 평균 연령을 구해라.
+     * 팀의 이름과 각 맴버의 평균 연령을 구해라.
      */
     @Test
     public void group() throws Exception {
@@ -772,7 +778,7 @@ public class QuerydslBasicTest {
                 .select(Projections.fields(UserDto.class,
                         ExpressionUtils.as(member.username, "name"),
                         ExpressionUtils.as(JPAExpressions
-                            .select(memberSub.age.max())
+                                .select(memberSub.age.max())
                                 .from(memberSub), "age")
                 ))
                 .from(member)
@@ -780,7 +786,7 @@ public class QuerydslBasicTest {
 
 
         //when
-        for (UserDto userDto : result){
+        for (UserDto userDto : result) {
             System.out.println("UserDto = " + userDto);
         }
 
@@ -799,7 +805,7 @@ public class QuerydslBasicTest {
                 .from(member)
                 .fetch();
 
-        for (MemberDto memberDto : result){
+        for (MemberDto memberDto : result) {
             System.out.println("memberDto = " + memberDto);
         }
 
@@ -807,11 +813,10 @@ public class QuerydslBasicTest {
         //when
 
         //then
-     }
+    }
 
     /**
      * 동적 쿼리 - BooleanBuilder 사용 예제
-     *
      */
 
 
@@ -827,17 +832,17 @@ public class QuerydslBasicTest {
 
         //then
         assertThat(result.size()).isEqualTo(1);
-     }
+    }
 
     private List<Member> searchMember1(String usernameCond, Integer ageCond) {
 
         BooleanBuilder builder = new BooleanBuilder();
 
-        if(usernameCond != null){
+        if (usernameCond != null) {
             builder.and(member.username.eq(usernameCond));
         }
 
-        if(ageCond != null){
+        if (ageCond != null) {
             builder.and(member.age.eq(ageCond));
         }
 
@@ -846,6 +851,129 @@ public class QuerydslBasicTest {
                 .where(builder)
                 .fetch();
     }
+
+
+    @Test
+    public void dynamicQuery_WhereParam() throws Exception {
+
+        //given
+
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+
+
+        //when
+        List<Member> result = searchMember2(usernameParam, ageParam);
+
+        //then
+        assertThat(result.size()).isEqualTo(1);
+
+        //then
+    }
+
+
+    /**
+     *
+     *  동적 쿼리를 생성하는 방식 중 가장 깔끔한 방식입니다. 메소드를 통해서 동적쿼리인지를 추측이 가능하다는 장점이 있습니다.
+     */
+    private List<Member> searchMember2(String usernameCond, Integer ageCond) {
+        // usernameEq() , ageEq() 메소드의 리턴 값이 null이면 where 절에 null이 들어가면 조건이 무시되기 때문에 코드가 깔끔해진다는 장점이 있습니다.
+        return queryFactory
+                .selectFrom(member)
+               // .where(usernameEq(usernameCond), ageEq(ageCond))
+                .where(allEq(usernameCond, ageCond))
+                .fetch();
+
+    }
+    //BooleanExpression 객체를 사용하면 and()를 이용하여 조립이 가능합니다. 마치 체인형 방식으로 사용하는 느낌적인 느낌입니다.
+    private BooleanExpression usernameEq(String usernameCond) {
+        return usernameCond != null ? member.username.eq(usernameCond) : null;
+    }
+
+
+    private BooleanExpression ageEq(Integer ageCond) {
+        return ageCond != null ? member.age.eq(ageCond) : null;
+    }
+
+    // 광고 상태 isValid, 날짜가 IN: isServiceable
+
+    private BooleanExpression allEq(String usernameCond, Integer ageCond){
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+
+
+    /**
+     *
+     *  벌크 연산 예
+     *
+     *  단점: 벌크 연산은 영속성 컨텍스트를 무시하기 때문에 db에 다이렉트로 쿼리를 날리기 때문에 영속성 상태와 동기화가 되지 않는다.
+     *  만약 벌크 연산 후 조회를 하게 될때 영속성 컨텍스트에 발크 연산 대상인 엔티티가 존재한다면 db에서 질의를 하여도 해당 로우들은 무시되고 영속성 컨텍스트가 우선순위를 가지기 때문에
+     *  의도하지 않는 데이터가 넘어올 수 있다는 것을 주의해야합니다.
+     */
+
+    @Test
+    public void bulkUpdate() throws Exception {
+
+        //given
+        //member1 = 10 -> DB 비회원
+        //member2 = 20 -> DB 비회원
+        //member3 = 30 -> DB member3
+        //member4 = 40 -> DB member4
+
+
+        //when
+        // 영향을 받은 로우 수를 리턴합니다.
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        // 플러시 강제로 호출 후 영속성 컨텍스트를 초기화시켜서 강제로 DB와 영속성 컨텍스트를 동기화 시킵니다.
+        em.flush();
+        em.clear();
+
+
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .fetch();
+
+
+        //then
+       result.forEach(member -> System.out.println(member));
+
+        assertThat(count).isEqualTo(2);
+     }
+
+
+     @Test
+     public void bulkAdd() throws Exception {
+
+         //given
+         long count = queryFactory
+                 .update(member)
+                 .set(member.age, member.age.add(1))
+                 .execute();
+
+         //when
+
+         //then
+      }
+
+
+      @Test
+      public void bulcDelete() throws Exception {
+
+          //given
+          queryFactory
+                  .delete(member)
+                  .where(member.age.gt(18))
+                  .execute();
+
+          //when
+
+          //then
+       }
 
 
 }
