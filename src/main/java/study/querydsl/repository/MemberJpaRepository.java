@@ -1,7 +1,12 @@
 package study.querydsl.repository;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import org.springframework.stereotype.Repository;
+import org.springframework.util.StringUtils;
+import study.querydsl.dto.MemberSearchCondition;
+import study.querydsl.dto.MemberTeamDto;
+import study.querydsl.dto.QMemberTeamDto;
 import study.querydsl.entity.Member;
 
 import javax.persistence.EntityManager;
@@ -9,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static study.querydsl.entity.QMember.member;
+import static study.querydsl.entity.QTeam.team;
 
 @Repository
 public class MemberJpaRepository {
@@ -53,6 +59,44 @@ public class MemberJpaRepository {
 
         return em.createQuery("select m from Member m where m.username = :username", Member.class)
                 .setParameter("username", username).getResultList();
+
+    }
+
+
+    public List<MemberTeamDto> searchByBuilder(MemberSearchCondition condition){
+
+        BooleanBuilder builder = new BooleanBuilder();
+
+        // web에서는 parameter로 "" 와 같은 빈 문자열이 자주 들어오기 때문에 스프링에서 제공해주는 StringUtils 클래스를 사용하면 유용합니다.
+        if (StringUtils.hasText(condition.getUsername())) {
+            builder.and(member.username.eq(condition.getUsername()));
+        }
+
+        if (StringUtils.hasText(condition.getTeamName())) {
+            builder.and(team.name.eq(condition.getTeamName()));
+        }
+
+        if (condition.getAgeGoe() != null) {
+           builder.and(member.age.goe(condition.getAgeGoe()));
+        }
+
+        if (condition.getAgeLoe() != null) {
+            builder.and(member.age.loe(condition.getAgeLoe()));
+        }
+
+
+        return queryFactory
+                .select(new QMemberTeamDto(
+                        member.id.as("memberId"),
+                        member.username,
+                        member.age,
+                        team.id.as("teamId"),
+                        team.name.as("teamName")))
+                .from(member)
+                .leftJoin(member.team, team)
+                .where(builder)
+                .fetch();
+
 
     }
 
