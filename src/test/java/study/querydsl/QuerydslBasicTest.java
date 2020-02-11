@@ -532,6 +532,9 @@ public class QuerydslBasicTest {
     }
 
 
+
+
+
     /**
      * select 절에서 sub 쿼리 사용 예제
      */
