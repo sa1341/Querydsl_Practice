@@ -126,7 +126,7 @@ public class MemberJpaRepository {
 
 
     private BooleanExpression teamNameEq(String teamName) {
-        return hasText(teamName) ? team.name.eq(teamName) : null;
+        return hasText(teamName) ? team .name.eq(teamName) : null;
     }
 
     private BooleanExpression ageGoe(Integer ageGoe) {
