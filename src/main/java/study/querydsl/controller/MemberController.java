@@ -25,12 +25,14 @@ public class MemberController {
         return  memberJpaRepository.search(condition);
     }
 
+    // 페이징 처리를 위한 메소드
     @GetMapping("/v2/members")
     public Page<MemberTeamDto> searchMemberV2(MemberSearchCondition condition, Pageable pageable){
         return  memberRepository.searchPageSimple(condition, pageable);
     }
 
 
+    // 페이징 처리를 위한 메소드
     @GetMapping("/v3/members")
     public Page<MemberTeamDto> searchMemberV3(MemberSearchCondition condition, Pageable pageable){
         return  memberRepository.searchPageComplex(condition, pageable);
