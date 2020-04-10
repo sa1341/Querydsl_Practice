@@ -1,9 +1,11 @@
 package study.querydsl;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import study.querydsl.dto.MemberDto;
+import study.querydsl.dto.QMemberDto;
 import study.querydsl.dto.UserDto;
 import study.querydsl.entity.Member;
 import study.querydsl.entity.QMember;
@@ -117,7 +120,7 @@ public class QuerydslBasicTest {
                 .selectFrom(member)
                 .where(
                         member.username.eq("member1"),
-                        (member.age.eq(10)))
+                        member.age.eq(10))
                 .fetchOne();
 
         //then
@@ -215,6 +218,11 @@ public class QuerydslBasicTest {
                 .fetchResults();
 
 
+        List<Member> members = queryResults.getResults();
+
+        members.forEach(member -> System.out.println("member:" +  member));
+
+
         //then
         assertThat(queryResults.getTotal()).isEqualTo(4);
         assertThat(queryResults.getLimit()).isEqualTo(2);
@@ -252,7 +260,7 @@ public class QuerydslBasicTest {
     }
 
     /**
-     * 팀의 이름과 각 팀의 평균 연령을 구해라.
+     * 팀의 이름과 각 맴버의 평균 연령을 구해라.
      */
     @Test
     public void group() throws Exception {
@@ -524,6 +532,9 @@ public class QuerydslBasicTest {
     }
 
 
+
+
+
     /**
      * select 절에서 sub 쿼리 사용 예제
      */
@@ -740,6 +751,7 @@ public class QuerydslBasicTest {
     @Test
     public void findDtoByConstructor() throws Exception {
         //생성자 통해서 dto에 값을 넣어서 반환해줍니다.를 생성자에서 받는 매개변수 개수와 프로젝션 타입과 개수가 일치해야 합니다.
+        // constructor의 단점은 생성자의 수가 맞지 않아도 컴파일 시점에 에러가 나지 않고 런타임 시점에 에러가 발생합니다.
         //given
         List<UserDto> result = queryFactory
                 .select(Projections.constructor(UserDto.class,
@@ -769,7 +781,7 @@ public class QuerydslBasicTest {
                 .select(Projections.fields(UserDto.class,
                         ExpressionUtils.as(member.username, "name"),
                         ExpressionUtils.as(JPAExpressions
-                            .select(memberSub.age.max())
+                                .select(memberSub.age.max())
                                 .from(memberSub), "age")
                 ))
                 .from(member)
@@ -777,11 +789,240 @@ public class QuerydslBasicTest {
 
 
         //when
-        for (UserDto userDto : result){
+        for (UserDto userDto : result) {
             System.out.println("UserDto = " + userDto);
         }
 
         //then
     }
+
+
+    @Test
+    public void findDtoByQueryProjection() throws Exception {
+        // MemberDto 클래스에 @QueryProjection 어노테이션이 적용하고 gradle에서 compileQuerydsl을 해주면 QMemberDto클래스가 생성됩니다. 이걸로 dto 변환이 쉽게 가능합니다.
+        // @QueryProjection 이 방식을 사용하면 컴파일 시점에 에러를 잡을 수 있는 장점이 있습니다. 위 방식의 consturctor 방식은 런타임 시점에 에러가 발생하기 때문입니다.
+        // 또한 querydsl 라이브러리에 의존성이 높다는 단점이 있기 때문에 dto가 순수하지가 않다는 점이 있습니다.
+        //given
+        List<MemberDto> result = queryFactory
+                .select(new QMemberDto(member.username, member.age))
+                .from(member)
+                .fetch();
+
+        for (MemberDto memberDto : result) {
+            System.out.println("memberDto = " + memberDto);
+        }
+
+
+        //when
+
+        //then
+    }
+
+    /**
+     * 동적 쿼리 - BooleanBuilder 사용 예제
+     */
+
+
+    @Test
+    public void dynamicQuery_BooleanBuilder() throws Exception {
+
+        //given
+        String usernameParam = "member1";
+        Integer ageParam = null;
+
+        List<Member> result = searchMember1(usernameParam, ageParam);
+        //when
+
+        //then
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember1(String usernameCond, Integer ageCond) {
+
+        BooleanBuilder builder = new BooleanBuilder();
+
+        if (usernameCond != null) {
+            builder.and(member.username.eq(usernameCond));
+        }
+
+        if (ageCond != null) {
+            builder.and(member.age.eq(ageCond));
+        }
+
+        return queryFactory
+                .selectFrom(member)
+                .where(builder)
+                .fetch();
+    }
+
+
+    @Test
+    public void dynamicQuery_WhereParam() throws Exception {
+
+        //given
+
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+
+
+        //when
+        List<Member> result = searchMember2(usernameParam, ageParam);
+
+        //then
+        assertThat(result.size()).isEqualTo(1);
+
+        //then
+    }
+
+
+    /**
+     *
+     *  동적 쿼리를 생성하는 방식 중 가장 깔끔한 방식입니다. 메소드를 통해서 동적쿼리인지를 추측이 가능하다는 장점이 있습니다.
+     */
+    private List<Member> searchMember2(String usernameCond, Integer ageCond) {
+        // usernameEq() , ageEq() 메소드의 리턴 값이 null이면 where 절에 null이 들어가면 조건이 무시되기 때문에 코드가 깔끔해진다는 장점이 있습니다.
+        return queryFactory
+                .selectFrom(member)
+               // .where(usernameEq(usernameCond), ageEq(ageCond))
+                .where(allEq(usernameCond, ageCond))
+                .fetch();
+
+    }
+    //BooleanExpression 객체를 사용하면 and()를 이용하여 조립이 가능합니다. 마치 체인형 방식으로 사용하는 느낌적인 느낌입니다.
+    private BooleanExpression usernameEq(String usernameCond) {
+        return usernameCond != null ? member.username.eq(usernameCond) : null;
+    }
+
+
+    private BooleanExpression ageEq(Integer ageCond) {
+        return ageCond != null ? member.age.eq(ageCond) : null;
+    }
+
+    // 광고 상태 isValid, 날짜가 IN: isServiceable
+
+    private BooleanExpression allEq(String usernameCond, Integer ageCond){
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+
+
+    /**
+     *
+     *  벌크 연산 예
+     *
+     *  단점: 벌크 연산은 영속성 컨텍스트를 무시하기 때문에 db에 다이렉트로 쿼리를 날리기 때문에 영속성 상태와 동기화가 되지 않는다.
+     *  만약 벌크 연산 후 조회를 하게 될때 영속성 컨텍스트에 발크 연산 대상인 엔티티가 존재한다면 db에서 질의를 하여도 해당 로우들은 무시되고 영속성 컨텍스트가 우선순위를 가지기 때문에
+     *  의도하지 않는 데이터가 넘어올 수 있다는 것을 주의해야합니다.
+     */
+
+    @Test
+    public void bulkUpdate() throws Exception {
+
+        //given
+        //member1 = 10 -> DB 비회원
+        //member2 = 20 -> DB 비회원
+        //member3 = 30 -> DB member3
+        //member4 = 40 -> DB member4
+
+
+        //when
+        // 영향을 받은 로우 수를 리턴합니다.
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        // 플러시 강제로 호출 후 영속성 컨텍스트를 초기화시켜서 강제로 DB와 영속성 컨텍스트를 동기화 시킵니다.
+        em.flush();
+        em.clear();
+
+
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .fetch();
+
+
+        //then
+       result.forEach(member -> System.out.println(member));
+
+        assertThat(count).isEqualTo(2);
+     }
+
+
+     @Test
+     public void bulkAdd() throws Exception {
+
+         //given
+         long count = queryFactory
+                 .update(member)
+                 .set(member.age, member.age.add(1))
+                 .execute();
+
+         //when
+
+         //then
+      }
+
+
+      @Test
+      public void bulcDelete() throws Exception {
+
+          //given
+          queryFactory
+                  .delete(member)
+                  .where(member.age.gt(18))
+                  .execute();
+
+          //when
+
+          //then
+       }
+
+       @Test
+       public void sqlFunction() throws Exception {
+
+           //given
+           List<String> result = queryFactory
+                   .select(Expressions.stringTemplate(
+                           "function('replace', {0}, {1}, {2})",
+                           member.username, "member", "M"))
+                   .from(member)
+                   .fetch();
+
+
+           //when
+
+           //then
+           for (String s : result){
+               System.out.println("s = " + s);
+           }
+
+
+        }
+
+        @Test
+        public void sqlFunction2() throws Exception {
+
+            //given
+            List<String> result = queryFactory
+                    .select(member.username)
+                    .from(member)
+                  /*  .where(member.username.eq(Expressions.stringTemplate(
+                            "function('lower', {0})", member.username)))*/
+                  .where(member.username.eq(member.username.lower()))
+                    .fetch();
+
+
+            //when
+
+            for (String s : result){
+                System.out.println("s = " + s);
+            }
+
+            //then
+         }
+
+
+
 }
 

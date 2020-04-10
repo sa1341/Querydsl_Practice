@@ -25,6 +25,8 @@ public class Member {
         this(username, 0);
     }
 
+
+
     public Member(String username, int age) {
 
         this(username, age, null);
